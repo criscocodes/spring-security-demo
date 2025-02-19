@@ -5,6 +5,7 @@ import dev.criscocodes.spring_security_demo.repository.UserRepository;
 import dev.criscocodes.spring_security_demo.security.JwtUtil;
 import dev.criscocodes.spring_security_demo.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -17,7 +18,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/auth")
@@ -33,12 +36,6 @@ public class AuthController {
 
     @Autowired
     private UserDetailsService userDetailsService;
-
-//    @Autowired
-//    private UserRepository userRepository;
-
-//    @Autowired
-//    private PasswordEncoder passwordEncoder;
 
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(@RequestBody Map<String, String> request) {
@@ -81,18 +78,23 @@ public class AuthController {
             String loggedInUsername = ((UserDetails) authentication.getPrincipal()).getUsername();
 
             // Step 3: Retrieve the user’s roles permissions
-            // - authentication.getAuthorities() returns a collection of GrantedAuthority
-            Collection<? extends GrantedAuthority> roles = authentication.getAuthorities();
+            // - Gets roles as a List of Strings
+            List<String> roles = authentication.getAuthorities()
+                    .stream()
+                    .map(GrantedAuthority::getAuthority)
+                    .toList();
 
             // STep 4: Generate JWT token for the authenticated user
             String token = jwtUtil.generateToken(loggedInUsername);
 
-            return ResponseEntity.ok(Map.of(
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                    .body(Map.of(
                     "status", "success",
                     "message", "User logged in successfully!",
                     "username", loggedInUsername,
-                    "roles", roles,
-                    "token", token
+                    "roles", roles
+//                    "token", token
             ));
         } catch (Exception e) {
             return ResponseEntity.status(401).body(Map.of(
