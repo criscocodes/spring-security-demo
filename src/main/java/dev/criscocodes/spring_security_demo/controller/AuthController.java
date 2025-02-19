@@ -3,16 +3,19 @@ package dev.criscocodes.spring_security_demo.controller;
 import dev.criscocodes.spring_security_demo.model.User;
 import dev.criscocodes.spring_security_demo.repository.UserRepository;
 import dev.criscocodes.spring_security_demo.security.JwtUtil;
+import dev.criscocodes.spring_security_demo.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 
@@ -26,69 +29,75 @@ public class AuthController {
     private JwtUtil jwtUtil;
 
     @Autowired
+    private UserService userService;
+
+    @Autowired
     private UserDetailsService userDetailsService;
 
-    @Autowired
-    private UserRepository userRepository;
+//    @Autowired
+//    private UserRepository userRepository;
 
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+//    @Autowired
+//    private PasswordEncoder passwordEncoder;
 
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(@RequestBody Map<String, String> request) {
         String username = request.get("username");
         String password = request.get("password");
 
-        // Check if user already exists
-        if (userRepository.findByUsername(username).isPresent()) {
-            return ResponseEntity.badRequest().body(Map.of(
+        try {
+            User newUser = userService.registerUser(username, password);
+
+            return ResponseEntity.status(201).body(Map.of(
+                    "status", "success",
+                    "message", "User registered successfully",
+                    "username", newUser.getUsername()
+            ));
+        } catch (IllegalArgumentException e) {
+
+            return ResponseEntity.status(400).body(Map.of(
                     "status", "error",
-                    "message", "User already exists!"
+                    "message", e.getMessage()
             ));
         }
-
-        // Create and save new user
-        User user = new User();
-        user.setUsername(username);
-        user.setPassword(passwordEncoder.encode(password)); // Encrypt password
-        user.setRoles(Collections.singleton("USER")); // Default role "USER"
-
-        userRepository.save(user);
-
-        return ResponseEntity.status(201).body(Map.of(
-                "status", "success",
-                "message", "User registered successfully!",
-                "username", user.getUsername()
-        ));
-
     }
 
+    // Login User
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(@RequestBody Map<String, String> request) {
         String username = request.get("username");
         String password = request.get("password");
 
         try {
-            // Authenticate user
-            Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
-            // TODO: REMOVE Logs
-            System.out.println("Authentication Object: " + authentication);
-            // Load user details
-            UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-            // Generate JWT token
-            String token = jwtUtil.generateToken(userDetails.getUsername());
+            // Step 1: Trigger Spring Security authentication
+            // - Validates the username & password against our db,
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(username, password)
+            );
+
+            // Step 2: Extract authenticated user data
+            // - authentication.getPrincipal() returns an instance of UserDetails, our CustomUserDetails class.
+            // - We cast it to UserDetails to retrieve the username.
+            String loggedInUsername = ((UserDetails) authentication.getPrincipal()).getUsername();
+
+            // Step 3: Retrieve the user’s roles permissions
+            // - authentication.getAuthorities() returns a collection of GrantedAuthority
+            Collection<? extends GrantedAuthority> roles = authentication.getAuthorities();
+
+            // STep 4: Generate JWT token for the authenticated user
+            String token = jwtUtil.generateToken(loggedInUsername);
 
             return ResponseEntity.ok(Map.of(
                     "status", "success",
                     "message", "User logged in successfully!",
-                    "username", username,
+                    "username", loggedInUsername,
+                    "roles", roles,
                     "token", token
             ));
-
-        } catch(Exception e) {
+        } catch (Exception e) {
             return ResponseEntity.status(401).body(Map.of(
-               "status", "error",
-               "message", "Invalid username or password"
+                    "status", "error",
+                    "message", "Invalid username or password"
             ));
         }
     }
