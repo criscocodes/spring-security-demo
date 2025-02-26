@@ -91,6 +91,7 @@ public class AuthController {
                     "roles", roles
 //                    "token", token
             ));
+
         } catch (Exception e) {
             return ResponseEntity.status(401).body(Map.of(
                     "status", "error",
